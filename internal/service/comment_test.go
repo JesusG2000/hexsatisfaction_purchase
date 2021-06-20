@@ -10,39 +10,65 @@ import (
 	"github.com/pkg/errors"
 	testAssert "github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 func TestCommentService_Create(t *testing.T) {
 	primitive.NewObjectID().Hex()
 	assert := testAssert.New(t)
-	testApi, err := InitTest4Mock()
-	require.NoError(t, err)
 	type test struct {
 		name   string
 		req    model.CreateCommentRequest
-		fn     func(comment *m.Comment, data test)
+		fn     func(comment *m.Comment, existanse *m.Existanse, data test)
 		expID  string
 		expErr error
 	}
 	tt := []test{
 		{
-			name: "Create errors",
+			name: "check user error",
 			req: model.CreateCommentRequest{
 				UserID:     1,
 				PurchaseID: primitive.NewObjectID().Hex(),
 				Date:       time.Date(2009, time.December, 10, 23, 0, 0, 0, time.Local),
 				Text:       "some text",
 			},
-			fn: func(comment *m.Comment, data test) {
+			fn: func(comment *m.Comment, existanse *m.Existanse, data test) {
+				existanse.On("User", mock.Anything, data.req.UserID).
+					Return(false, errors.New(""))
+			},
+			expErr: errors.Wrap(errors.New(""), "check error"),
+		},
+		{
+			name: "user  found",
+			req: model.CreateCommentRequest{
+				UserID:     1,
+				PurchaseID: primitive.NewObjectID().Hex(),
+				Date:       time.Date(2009, time.December, 10, 23, 0, 0, 0, time.Local),
+				Text:       "some text",
+			},
+			fn: func(comment *m.Comment, existanse *m.Existanse, data test) {
+				existanse.On("User", mock.Anything, data.req.UserID).
+					Return(true, nil)
+			},
+		},
+		{
+			name: "create error",
+			req: model.CreateCommentRequest{
+				UserID:     1,
+				PurchaseID: primitive.NewObjectID().Hex(),
+				Date:       time.Date(2009, time.December, 10, 23, 0, 0, 0, time.Local),
+				Text:       "some text",
+			},
+			fn: func(comment *m.Comment, existanse *m.Existanse, data test) {
+				existanse.On("User", mock.Anything, data.req.UserID).
+					Return(false, nil)
 				comment.On("Create", mock.Anything, model.CommentDTO{
 					UserID:     data.req.UserID,
 					PurchaseID: data.req.PurchaseID,
 					Date:       data.req.Date,
 					Text:       data.req.Text,
 				}).
-					Return(data.expID, errors.New(""))
+					Return("", errors.New(""))
 			},
 			expErr: errors.Wrap(errors.New(""), "couldn't create comment"),
 		},
@@ -54,7 +80,9 @@ func TestCommentService_Create(t *testing.T) {
 				Date:       time.Date(2009, time.December, 10, 23, 0, 0, 0, time.Local),
 				Text:       "some text",
 			},
-			fn: func(comment *m.Comment, data test) {
+			fn: func(comment *m.Comment, existanse *m.Existanse, data test) {
+				existanse.On("User", mock.Anything, data.req.UserID).
+					Return(false, nil)
 				comment.On("Create", mock.Anything, model.CommentDTO{
 					UserID:     data.req.UserID,
 					PurchaseID: data.req.PurchaseID,
@@ -69,10 +97,11 @@ func TestCommentService_Create(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			comment := new(m.Comment)
+			existanse := new(m.Existanse)
 			ctx := context.Background()
-			service := NewCommentService(comment, testApi.GRPCClient)
+			service := NewCommentService(comment, existanse)
 			if tc.fn != nil {
-				tc.fn(comment, tc)
+				tc.fn(comment, existanse, tc)
 			}
 			id, err := service.Create(ctx, tc.req)
 			if err != nil {
@@ -85,16 +114,43 @@ func TestCommentService_Create(t *testing.T) {
 
 func TestCommentService_Update(t *testing.T) {
 	assert := testAssert.New(t)
-	testApi, err := InitTest4Mock()
-	require.NoError(t, err)
 	type test struct {
 		name   string
 		req    model.UpdateCommentRequest
-		fn     func(comment *m.Comment, data test)
+		fn     func(comment *m.Comment, existanse *m.Existanse, data test)
 		expID  string
 		expErr error
 	}
 	tt := []test{
+		{
+			name: "check user errors",
+			req: model.UpdateCommentRequest{
+				ID:         primitive.NewObjectID().Hex(),
+				UserID:     1,
+				PurchaseID: primitive.NewObjectID().Hex(),
+				Date:       time.Date(2009, time.December, 10, 23, 0, 0, 0, time.Local),
+				Text:       "some text",
+			},
+			fn: func(comment *m.Comment, existanse *m.Existanse, data test) {
+				existanse.On("User", mock.Anything, data.req.UserID).
+					Return(false, errors.New(""))
+			},
+			expErr: errors.Wrap(errors.New(""), "check error"),
+		},
+		{
+			name: "user not exist",
+			req: model.UpdateCommentRequest{
+				ID:         primitive.NewObjectID().Hex(),
+				UserID:     1,
+				PurchaseID: primitive.NewObjectID().Hex(),
+				Date:       time.Date(2009, time.December, 10, 23, 0, 0, 0, time.Local),
+				Text:       "some text",
+			},
+			fn: func(comment *m.Comment, existanse *m.Existanse, data test) {
+				existanse.On("User", mock.Anything, data.req.UserID).
+					Return(false, nil)
+			},
+		},
 		{
 			name: "Update errors",
 			req: model.UpdateCommentRequest{
@@ -104,7 +160,9 @@ func TestCommentService_Update(t *testing.T) {
 				Date:       time.Date(2009, time.December, 10, 23, 0, 0, 0, time.Local),
 				Text:       "some text",
 			},
-			fn: func(comment *m.Comment, data test) {
+			fn: func(comment *m.Comment, existanse *m.Existanse, data test) {
+				existanse.On("User", mock.Anything, data.req.UserID).
+					Return(true, nil)
 				comment.On("Update", mock.Anything, data.req.ID, model.CommentDTO{
 					UserID:     data.req.UserID,
 					PurchaseID: data.req.PurchaseID,
@@ -124,7 +182,9 @@ func TestCommentService_Update(t *testing.T) {
 				Date:       time.Date(2009, time.December, 10, 23, 0, 0, 0, time.Local),
 				Text:       "some text",
 			},
-			fn: func(comment *m.Comment, data test) {
+			fn: func(comment *m.Comment, existanse *m.Existanse, data test) {
+				existanse.On("User", mock.Anything, data.req.UserID).
+					Return(true, nil)
 				comment.On("Update", mock.Anything, data.req.ID, model.CommentDTO{
 					UserID:     data.req.UserID,
 					PurchaseID: data.req.PurchaseID,
@@ -139,10 +199,11 @@ func TestCommentService_Update(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			comment := new(m.Comment)
+			existence := new(m.Existanse)
 			ctx := context.Background()
-			service := NewCommentService(comment, testApi.GRPCClient)
+			service := NewCommentService(comment, existence)
 			if tc.fn != nil {
-				tc.fn(comment, tc)
+				tc.fn(comment, existence, tc)
 			}
 			id, err := service.Update(ctx, tc.req)
 			if err != nil {
@@ -155,8 +216,7 @@ func TestCommentService_Update(t *testing.T) {
 
 func TestCommentService_Delete(t *testing.T) {
 	assert := testAssert.New(t)
-	testApi, err := InitTest4Mock()
-	require.NoError(t, err)
+
 	type test struct {
 		name   string
 		req    model.DeleteCommentRequest
@@ -191,8 +251,9 @@ func TestCommentService_Delete(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			comment := new(m.Comment)
+			existence := new(m.Existanse)
 			ctx := context.Background()
-			service := NewCommentService(comment, testApi.GRPCClient)
+			service := NewCommentService(comment, existence)
 			if tc.fn != nil {
 				tc.fn(comment, tc)
 			}
@@ -207,8 +268,7 @@ func TestCommentService_Delete(t *testing.T) {
 
 func TestCommentService_FindByID(t *testing.T) {
 	assert := testAssert.New(t)
-	testApi, err := InitTest4Mock()
-	require.NoError(t, err)
+
 	type test struct {
 		name   string
 		req    model.IDCommentRequest
@@ -249,8 +309,9 @@ func TestCommentService_FindByID(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			comment := new(m.Comment)
+			existence := new(m.Existanse)
 			ctx := context.Background()
-			service := NewCommentService(comment, testApi.GRPCClient)
+			service := NewCommentService(comment, existence)
 			if tc.fn != nil {
 				tc.fn(comment, tc)
 			}
@@ -265,22 +326,43 @@ func TestCommentService_FindByID(t *testing.T) {
 
 func TestCommentService_FindAllByUserID(t *testing.T) {
 	assert := testAssert.New(t)
-	testApi, err := InitTest4Mock()
-	require.NoError(t, err)
 	type test struct {
 		name   string
 		req    model.UserIDCommentRequest
-		fn     func(comment *m.Comment, data *test)
+		fn     func(comment *m.Comment, existanse *m.Existanse, data *test)
 		exp    []model.CommentDTO
 		expErr error
 	}
 	tt := []test{
 		{
+			name: "check error",
+			req: model.UserIDCommentRequest{
+				ID: 1,
+			},
+			fn: func(comment *m.Comment, existanse *m.Existanse, data *test) {
+				existanse.On("User", mock.Anything, data.req.ID).
+					Return(false, errors.New(""))
+			},
+			expErr: errors.Wrap(errors.New(""), "check error"),
+		},
+		{
+			name: "user not found",
+			req: model.UserIDCommentRequest{
+				ID: 1,
+			},
+			fn: func(comment *m.Comment, existanse *m.Existanse, data *test) {
+				existanse.On("User", mock.Anything, data.req.ID).
+					Return(false, nil)
+			},
+		},
+		{
 			name: "Find errors",
 			req: model.UserIDCommentRequest{
 				ID: 1,
 			},
-			fn: func(comment *m.Comment, data *test) {
+			fn: func(comment *m.Comment, existanse *m.Existanse, data *test) {
+				existanse.On("User", mock.Anything, data.req.ID).
+					Return(true, nil)
 				comment.On("FindAllByUserID", mock.Anything, data.req.ID).
 					Return(data.exp, errors.New(""))
 			},
@@ -291,10 +373,12 @@ func TestCommentService_FindAllByUserID(t *testing.T) {
 			req: model.UserIDCommentRequest{
 				ID: 1,
 			},
-			fn: func(comment *m.Comment, data *test) {
+			fn: func(comment *m.Comment, existanse *m.Existanse, data *test) {
 				for i := range data.exp {
 					data.exp[i].UserID = data.req.ID
 				}
+				existanse.On("User", mock.Anything, data.req.ID).
+					Return(true, nil)
 				comment.On("FindAllByUserID", mock.Anything, data.req.ID).
 					Return(data.exp, nil)
 			},
@@ -317,10 +401,11 @@ func TestCommentService_FindAllByUserID(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			comment := new(m.Comment)
+			existence := new(m.Existanse)
 			ctx := context.Background()
-			service := NewCommentService(comment, testApi.GRPCClient)
+			service := NewCommentService(comment, existence)
 			if tc.fn != nil {
-				tc.fn(comment, &tc)
+				tc.fn(comment, existence, &tc)
 			}
 			c, err := service.FindAllByUserID(ctx, tc.req)
 			if err != nil {
@@ -333,8 +418,7 @@ func TestCommentService_FindAllByUserID(t *testing.T) {
 
 func TestCommentService_FindAllByPurchaseID(t *testing.T) {
 	assert := testAssert.New(t)
-	testApi, err := InitTest4Mock()
-	require.NoError(t, err)
+
 	type test struct {
 		name   string
 		req    model.PurchaseIDCommentRequest
@@ -385,8 +469,9 @@ func TestCommentService_FindAllByPurchaseID(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			comment := new(m.Comment)
+			existence := new(m.Existanse)
 			ctx := context.Background()
-			service := NewCommentService(comment, testApi.GRPCClient)
+			service := NewCommentService(comment, existence)
 			if tc.fn != nil {
 				tc.fn(comment, &tc)
 			}
@@ -401,23 +486,46 @@ func TestCommentService_FindAllByPurchaseID(t *testing.T) {
 
 func TestCommentService_FindByUserIDAndPurchaseID(t *testing.T) {
 	assert := testAssert.New(t)
-	testApi, err := InitTest4Mock()
-	require.NoError(t, err)
 	type test struct {
 		name   string
 		req    model.UserPurchaseIDCommentRequest
-		fn     func(comment *m.Comment, data *test)
+		fn     func(comment *m.Comment, existanse *m.Existanse, data *test)
 		exp    []model.CommentDTO
 		expErr error
 	}
 	tt := []test{
+		{
+			name: "check error",
+			req: model.UserPurchaseIDCommentRequest{
+				UserID:     1,
+				PurchaseID: primitive.NewObjectID().Hex(),
+			},
+			fn: func(comment *m.Comment, existanse *m.Existanse, data *test) {
+				existanse.On("User", mock.Anything, data.req.UserID).
+					Return(false, errors.New(""))
+			},
+			expErr: errors.Wrap(errors.New(""), "check error"),
+		},
+		{
+			name: "user not found",
+			req: model.UserPurchaseIDCommentRequest{
+				UserID:     1,
+				PurchaseID: primitive.NewObjectID().Hex(),
+			},
+			fn: func(comment *m.Comment, existanse *m.Existanse, data *test) {
+				existanse.On("User", mock.Anything, data.req.UserID).
+					Return(false, nil)
+			},
+		},
 		{
 			name: "Find errors",
 			req: model.UserPurchaseIDCommentRequest{
 				UserID:     1,
 				PurchaseID: primitive.NewObjectID().Hex(),
 			},
-			fn: func(comment *m.Comment, data *test) {
+			fn: func(comment *m.Comment, existanse *m.Existanse, data *test) {
+				existanse.On("User", mock.Anything, data.req.UserID).
+					Return(true, nil)
 				comment.On("FindByUserIDAndPurchaseID", mock.Anything, data.req.UserID, data.req.PurchaseID).
 					Return(data.exp, errors.New(""))
 			},
@@ -429,11 +537,13 @@ func TestCommentService_FindByUserIDAndPurchaseID(t *testing.T) {
 				UserID:     1,
 				PurchaseID: primitive.NewObjectID().Hex(),
 			},
-			fn: func(comment *m.Comment, data *test) {
+			fn: func(comment *m.Comment, existanse *m.Existanse, data *test) {
 				for i := range data.exp {
 					data.exp[i].UserID = data.req.UserID
 					data.exp[i].PurchaseID = data.req.PurchaseID
 				}
+				existanse.On("User", mock.Anything, data.req.UserID).
+					Return(true, nil)
 				comment.On("FindByUserIDAndPurchaseID", mock.Anything, data.req.UserID, data.req.PurchaseID).
 					Return(data.exp, nil)
 			},
@@ -454,10 +564,11 @@ func TestCommentService_FindByUserIDAndPurchaseID(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			comment := new(m.Comment)
+			existence := new(m.Existanse)
 			ctx := context.Background()
-			service := NewCommentService(comment, testApi.GRPCClient)
+			service := NewCommentService(comment, existence)
 			if tc.fn != nil {
-				tc.fn(comment, &tc)
+				tc.fn(comment, existence, &tc)
 			}
 			c, err := service.FindByUserIDAndPurchaseID(ctx, tc.req)
 			if err != nil {
@@ -470,8 +581,7 @@ func TestCommentService_FindByUserIDAndPurchaseID(t *testing.T) {
 
 func TestCommentService_FindAll(t *testing.T) {
 	assert := testAssert.New(t)
-	testApi, err := InitTest4Mock()
-	require.NoError(t, err)
+
 	type test struct {
 		name   string
 		fn     func(comment *m.Comment, data test)
@@ -515,8 +625,9 @@ func TestCommentService_FindAll(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			comment := new(m.Comment)
+			existence := new(m.Existanse)
 			ctx := context.Background()
-			service := NewCommentService(comment, testApi.GRPCClient)
+			service := NewCommentService(comment, existence)
 			if tc.fn != nil {
 				tc.fn(comment, tc)
 			}
@@ -531,8 +642,7 @@ func TestCommentService_FindAll(t *testing.T) {
 
 func TestCommentService_FindByText(t *testing.T) {
 	assert := testAssert.New(t)
-	testApi, err := InitTest4Mock()
-	require.NoError(t, err)
+
 	type test struct {
 		name   string
 		req    model.TextCommentRequest
@@ -582,8 +692,9 @@ func TestCommentService_FindByText(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			comment := new(m.Comment)
+			existence := new(m.Existanse)
 			ctx := context.Background()
-			service := NewCommentService(comment, testApi.GRPCClient)
+			service := NewCommentService(comment, existence)
 			if tc.fn != nil {
 				tc.fn(comment, tc)
 			}
@@ -598,8 +709,7 @@ func TestCommentService_FindByText(t *testing.T) {
 
 func TestCommentService_FindByPeriod(t *testing.T) {
 	assert := testAssert.New(t)
-	testApi, err := InitTest4Mock()
-	require.NoError(t, err)
+
 	type test struct {
 		name   string
 		req    model.PeriodCommentRequest
@@ -651,8 +761,9 @@ func TestCommentService_FindByPeriod(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			comment := new(m.Comment)
+			existence := new(m.Existanse)
 			ctx := context.Background()
-			service := NewCommentService(comment, testApi.GRPCClient)
+			service := NewCommentService(comment, existence)
 			if tc.fn != nil {
 				tc.fn(comment, tc)
 			}
