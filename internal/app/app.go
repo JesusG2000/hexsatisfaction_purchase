@@ -41,7 +41,7 @@ func Run() {
 		log.Fatal("Init jwt-token error: ", err)
 	}
 	addr := net.JoinHostPort(cfg.GRPC.Host, cfg.GRPC.Port)
-	grpcClient, err := grpc.NewGRPCClient(addr)
+	checkerService, err := grpc.NewCheckerService(addr)
 	if err != nil {
 		log.Fatal("Init grpc client error: ", err)
 	}
@@ -50,7 +50,7 @@ func Run() {
 	services := service.NewServices(service.Deps{
 		Repos:        repos,
 		TokenManager: tokenManager,
-		GRPCClient:   grpcClient,
+		Existanse:    checkerService,
 	})
 
 	router := handler.NewHandler(services, tokenManager)

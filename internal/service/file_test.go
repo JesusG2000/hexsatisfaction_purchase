@@ -10,22 +10,55 @@ import (
 	"github.com/pkg/errors"
 	testAssert "github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 func TestFileService_Create(t *testing.T) {
 	assert := testAssert.New(t)
-	testApi, err := InitTest4Mock()
-	require.NoError(t, err)
+
 	type test struct {
 		name   string
 		req    model.CreateFileRequest
-		fn     func(file *m.File, data test)
+		fn     func(file *m.File, existence *m.Existanse, data test)
 		expID  string
 		expErr error
 	}
 	tt := []test{
+		{
+			name: "check errors",
+			req: model.CreateFileRequest{
+				Name:        "some",
+				Description: "some",
+				Size:        1,
+				Path:        "some",
+				AddDate:     time.Date(2009, time.November, 10, 23, 0, 0, 0, time.Local),
+				UpdateDate:  time.Date(2009, time.November, 10, 23, 0, 0, 0, time.Local),
+				Actual:      true,
+				AuthorID:    1,
+			},
+			fn: func(file *m.File, existence *m.Existanse, data test) {
+				existence.On("Author", mock.Anything, data.req.AuthorID).
+					Return(false, errors.New(""))
+			},
+			expErr: errors.Wrap(errors.New(""), "check error"),
+		},
+		{
+			name: "author exist",
+			req: model.CreateFileRequest{
+				Name:        "some",
+				Description: "some",
+				Size:        1,
+				Path:        "some",
+				AddDate:     time.Date(2009, time.November, 10, 23, 0, 0, 0, time.Local),
+				UpdateDate:  time.Date(2009, time.November, 10, 23, 0, 0, 0, time.Local),
+				Actual:      true,
+				AuthorID:    1,
+			},
+			fn: func(file *m.File, existence *m.Existanse, data test) {
+				existence.On("Author", mock.Anything, data.req.AuthorID).
+					Return(true, nil)
+			},
+		},
 		{
 			name: "Create errors",
 			req: model.CreateFileRequest{
@@ -38,7 +71,9 @@ func TestFileService_Create(t *testing.T) {
 				Actual:      true,
 				AuthorID:    1,
 			},
-			fn: func(file *m.File, data test) {
+			fn: func(file *m.File, existence *m.Existanse, data test) {
+				existence.On("Author", mock.Anything, data.req.AuthorID).
+					Return(false, nil)
 				file.On("Create", mock.Anything, model.FileDTO{
 					Name:        data.req.Name,
 					Description: data.req.Description,
@@ -65,7 +100,9 @@ func TestFileService_Create(t *testing.T) {
 				Actual:      true,
 				AuthorID:    1,
 			},
-			fn: func(file *m.File, data test) {
+			fn: func(file *m.File, existence *m.Existanse, data test) {
+				existence.On("Author", mock.Anything, data.req.AuthorID).
+					Return(false, nil)
 				file.On("Create", mock.Anything, model.FileDTO{
 					Name:        data.req.Name,
 					Description: data.req.Description,
@@ -84,10 +121,11 @@ func TestFileService_Create(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			file := new(m.File)
+			existence := new(m.Existanse)
 			ctx := context.Background()
-			service := NewFileService(file, testApi.GRPCClient)
+			service := NewFileService(file, existence)
 			if tc.fn != nil {
-				tc.fn(file, tc)
+				tc.fn(file, existence, tc)
 			}
 			id, err := service.Create(ctx, tc.req)
 			if err != nil {
@@ -100,16 +138,53 @@ func TestFileService_Create(t *testing.T) {
 
 func TestFileService_Update(t *testing.T) {
 	assert := testAssert.New(t)
-	testApi, err := InitTest4Mock()
-	require.NoError(t, err)
+
 	type test struct {
 		name   string
 		req    model.UpdateFileRequest
-		fn     func(file *m.File, data *test)
+		fn     func(file *m.File, existence *m.Existanse, data *test)
 		expID  string
 		expErr error
 	}
 	tt := []test{
+		{
+			name: "check errors",
+			req: model.UpdateFileRequest{
+				ID:          primitive.NewObjectID().Hex(),
+				Name:        "some",
+				Description: "some",
+				Size:        1,
+				Path:        "some",
+				AddDate:     time.Date(2009, time.November, 10, 23, 0, 0, 0, time.Local),
+				UpdateDate:  time.Date(2009, time.November, 10, 23, 0, 0, 0, time.Local),
+				Actual:      true,
+				AuthorID:    1,
+			},
+			fn: func(file *m.File, existence *m.Existanse, data *test) {
+				existence.On("Author", mock.Anything, data.req.AuthorID).
+					Return(false, errors.New(""))
+			},
+			expErr: errors.Wrap(errors.New(""), "check error"),
+		},
+		{
+			name: "author not exist",
+			req: model.UpdateFileRequest{
+				ID:          primitive.NewObjectID().Hex(),
+				Name:        "some",
+				Description: "some",
+				Size:        1,
+				Path:        "some",
+				AddDate:     time.Date(2009, time.November, 10, 23, 0, 0, 0, time.Local),
+				UpdateDate:  time.Date(2009, time.November, 10, 23, 0, 0, 0, time.Local),
+				Actual:      true,
+				AuthorID:    1,
+			},
+			fn: func(file *m.File, existence *m.Existanse, data *test) {
+				existence.On("Author", mock.Anything, data.req.AuthorID).
+					Return(false, nil)
+			},
+			expErr: errors.Wrap(errors.New(""), "couldn't update file"),
+		},
 		{
 			name: "Update errors",
 			req: model.UpdateFileRequest{
@@ -123,7 +198,9 @@ func TestFileService_Update(t *testing.T) {
 				Actual:      true,
 				AuthorID:    1,
 			},
-			fn: func(file *m.File, data *test) {
+			fn: func(file *m.File, existence *m.Existanse, data *test) {
+				existence.On("Author", mock.Anything, data.req.AuthorID).
+					Return(true, nil)
 				file.On("Update", mock.Anything, data.req.ID, model.FileDTO{
 					Name:        data.req.Name,
 					Description: data.req.Description,
@@ -151,8 +228,10 @@ func TestFileService_Update(t *testing.T) {
 				Actual:      true,
 				AuthorID:    1,
 			},
-			fn: func(file *m.File, data *test) {
+			fn: func(file *m.File, existence *m.Existanse, data *test) {
 				data.expID = data.req.ID
+				existence.On("Author", mock.Anything, data.req.AuthorID).
+					Return(true, nil)
 				file.On("Update", mock.Anything, data.req.ID, model.FileDTO{
 					Name:        data.req.Name,
 					Description: data.req.Description,
@@ -170,10 +249,11 @@ func TestFileService_Update(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			file := new(m.File)
+			existence := new(m.Existanse)
 			ctx := context.Background()
-			service := NewFileService(file, testApi.GRPCClient)
+			service := NewFileService(file, existence)
 			if tc.fn != nil {
-				tc.fn(file, &tc)
+				tc.fn(file, existence, &tc)
 			}
 			id, err := service.Update(ctx, tc.req)
 			if err != nil {
@@ -186,8 +266,7 @@ func TestFileService_Update(t *testing.T) {
 
 func TestFileService_Delete(t *testing.T) {
 	assert := testAssert.New(t)
-	testApi, err := InitTest4Mock()
-	require.NoError(t, err)
+
 	type test struct {
 		name   string
 		req    model.DeleteFileRequest
@@ -223,8 +302,9 @@ func TestFileService_Delete(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			file := new(m.File)
+			existence := new(m.Existanse)
 			ctx := context.Background()
-			service := NewFileService(file, testApi.GRPCClient)
+			service := NewFileService(file, existence)
 			if tc.fn != nil {
 				tc.fn(file, &tc)
 			}
@@ -239,8 +319,7 @@ func TestFileService_Delete(t *testing.T) {
 
 func TestFileService_FindByID(t *testing.T) {
 	assert := testAssert.New(t)
-	testApi, err := InitTest4Mock()
-	require.NoError(t, err)
+
 	type test struct {
 		name   string
 		req    model.IDFileRequest
@@ -285,8 +364,9 @@ func TestFileService_FindByID(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			file := new(m.File)
+			existence := new(m.Existanse)
 			ctx := context.Background()
-			service := NewFileService(file, testApi.GRPCClient)
+			service := NewFileService(file, existence)
 			if tc.fn != nil {
 				tc.fn(file, &tc)
 			}
@@ -301,8 +381,7 @@ func TestFileService_FindByID(t *testing.T) {
 
 func TestFileService_FindByName(t *testing.T) {
 	assert := testAssert.New(t)
-	testApi, err := InitTest4Mock()
-	require.NoError(t, err)
+
 	type test struct {
 		name   string
 		req    model.NameFileRequest
@@ -349,8 +428,9 @@ func TestFileService_FindByName(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			file := new(m.File)
+			existence := new(m.Existanse)
 			ctx := context.Background()
-			service := NewFileService(file, testApi.GRPCClient)
+			service := NewFileService(file, existence)
 			if tc.fn != nil {
 				tc.fn(file, tc)
 			}
@@ -365,8 +445,7 @@ func TestFileService_FindByName(t *testing.T) {
 
 func TestFileService_FindAll(t *testing.T) {
 	assert := testAssert.New(t)
-	testApi, err := InitTest4Mock()
-	require.NoError(t, err)
+
 	type test struct {
 		name   string
 		fn     func(file *m.File, data test)
@@ -408,8 +487,9 @@ func TestFileService_FindAll(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			file := new(m.File)
+			existence := new(m.Existanse)
 			ctx := context.Background()
-			service := NewFileService(file, testApi.GRPCClient)
+			service := NewFileService(file, existence)
 			if tc.fn != nil {
 				tc.fn(file, tc)
 			}
@@ -424,22 +504,44 @@ func TestFileService_FindAll(t *testing.T) {
 
 func TestFileService_FindByAuthorID(t *testing.T) {
 	assert := testAssert.New(t)
-	testApi, err := InitTest4Mock()
-	require.NoError(t, err)
+
 	type test struct {
 		name   string
 		req    model.AuthorIDFileRequest
-		fn     func(file *m.File, data *test)
+		fn     func(file *m.File, existence *m.Existanse, data *test)
 		exp    []model.FileDTO
 		expErr error
 	}
 	tt := []test{
 		{
+			name: "check errors",
+			req: model.AuthorIDFileRequest{
+				ID: 1,
+			},
+			fn: func(file *m.File, existence *m.Existanse, data *test) {
+				existence.On("Author", mock.Anything, data.req.ID).
+					Return(false, errors.New(""))
+			},
+			expErr: errors.Wrap(errors.New(""), "check error"),
+		},
+		{
+			name: "author not found",
+			req: model.AuthorIDFileRequest{
+				ID: 1,
+			},
+			fn: func(file *m.File, existence *m.Existanse, data *test) {
+				existence.On("Author", mock.Anything, data.req.ID).
+					Return(false, nil)
+			},
+		},
+		{
 			name: "Find errors",
 			req: model.AuthorIDFileRequest{
 				ID: 1,
 			},
-			fn: func(file *m.File, data *test) {
+			fn: func(file *m.File, existence *m.Existanse, data *test) {
+				existence.On("Author", mock.Anything, data.req.ID).
+					Return(true, nil)
 				file.On("FindByAuthorID", mock.Anything, data.req.ID).
 					Return(data.exp, errors.New(""))
 			},
@@ -450,10 +552,12 @@ func TestFileService_FindByAuthorID(t *testing.T) {
 			req: model.AuthorIDFileRequest{
 				ID: 1,
 			},
-			fn: func(file *m.File, data *test) {
+			fn: func(file *m.File, existence *m.Existanse, data *test) {
 				for i := range data.exp {
 					data.exp[i].AuthorID = data.req.ID
 				}
+				existence.On("Author", mock.Anything, data.req.ID).
+					Return(true, nil)
 				file.On("FindByAuthorID", mock.Anything, data.req.ID).
 					Return(data.exp, nil)
 			},
@@ -474,10 +578,11 @@ func TestFileService_FindByAuthorID(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			file := new(m.File)
+			existence := new(m.Existanse)
 			ctx := context.Background()
-			service := NewFileService(file, testApi.GRPCClient)
+			service := NewFileService(file, existence)
 			if tc.fn != nil {
-				tc.fn(file, &tc)
+				tc.fn(file, existence, &tc)
 			}
 			f, err := service.FindByAuthorID(ctx, tc.req)
 			if err != nil {
@@ -490,8 +595,7 @@ func TestFileService_FindByAuthorID(t *testing.T) {
 
 func TestFileService_FindNotActual(t *testing.T) {
 	assert := testAssert.New(t)
-	testApi, err := InitTest4Mock()
-	require.NoError(t, err)
+
 	type test struct {
 		name   string
 		fn     func(file *m.File, data test)
@@ -533,8 +637,9 @@ func TestFileService_FindNotActual(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			file := new(m.File)
+			existence := new(m.Existanse)
 			ctx := context.Background()
-			service := NewFileService(file, testApi.GRPCClient)
+			service := NewFileService(file, existence)
 			if tc.fn != nil {
 				tc.fn(file, tc)
 			}
@@ -549,8 +654,7 @@ func TestFileService_FindNotActual(t *testing.T) {
 
 func TestFileService_FindActual(t *testing.T) {
 	assert := testAssert.New(t)
-	testApi, err := InitTest4Mock()
-	require.NoError(t, err)
+
 	type test struct {
 		name   string
 		fn     func(file *m.File, data test)
@@ -592,8 +696,9 @@ func TestFileService_FindActual(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			file := new(m.File)
+			existence := new(m.Existanse)
 			ctx := context.Background()
-			service := NewFileService(file, testApi.GRPCClient)
+			service := NewFileService(file, existence)
 			if tc.fn != nil {
 				tc.fn(file, tc)
 			}
@@ -608,8 +713,7 @@ func TestFileService_FindActual(t *testing.T) {
 
 func TestFileService_FindAddedByPeriod(t *testing.T) {
 	assert := testAssert.New(t)
-	testApi, err := InitTest4Mock()
-	require.NoError(t, err)
+
 	type test struct {
 		name   string
 		req    model.AddedPeriodFileRequest
@@ -658,8 +762,9 @@ func TestFileService_FindAddedByPeriod(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			file := new(m.File)
+			existence := new(m.Existanse)
 			ctx := context.Background()
-			service := NewFileService(file, testApi.GRPCClient)
+			service := NewFileService(file, existence)
 			if tc.fn != nil {
 				tc.fn(file, tc)
 			}
@@ -674,8 +779,7 @@ func TestFileService_FindAddedByPeriod(t *testing.T) {
 
 func TestFileService_FindUpdatedByPeriod(t *testing.T) {
 	assert := testAssert.New(t)
-	testApi, err := InitTest4Mock()
-	require.NoError(t, err)
+
 	type test struct {
 		name   string
 		req    model.UpdatedPeriodFileRequest
@@ -724,8 +828,9 @@ func TestFileService_FindUpdatedByPeriod(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			file := new(m.File)
+			existence := new(m.Existanse)
 			ctx := context.Background()
-			service := NewFileService(file, testApi.GRPCClient)
+			service := NewFileService(file, existence)
 			if tc.fn != nil {
 				tc.fn(file, tc)
 			}

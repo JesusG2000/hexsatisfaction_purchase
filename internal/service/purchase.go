@@ -3,7 +3,7 @@ package service
 import (
 	"context"
 
-	"github.com/JesusG2000/hexsatisfaction/pkg/grpc/api"
+	"github.com/JesusG2000/hexsatisfaction_purchase/internal/grpc"
 	"github.com/JesusG2000/hexsatisfaction_purchase/internal/model"
 	"github.com/JesusG2000/hexsatisfaction_purchase/internal/repository"
 	"github.com/pkg/errors"
@@ -12,23 +12,23 @@ import (
 // PurchaseService is a purchase service.
 type PurchaseService struct {
 	repository.Purchase
-	client api.ExistanceClient
+	grpc grpc.Checker
 }
 
 // NewPurchaseService is a PurchaseService service constructor.
-func NewPurchaseService(purchase repository.Purchase, client api.ExistanceClient) *PurchaseService {
-	return &PurchaseService{purchase, client}
+func NewPurchaseService(purchase repository.Purchase, grpc grpc.Checker) *PurchaseService {
+	return &PurchaseService{purchase, grpc}
 }
 
 // Create creates new purchase and returns id.
 func (p PurchaseService) Create(ctx context.Context, request model.CreatePurchaseRequest) (string, error) {
 	var id string
-	res, err := p.client.User(ctx, &api.IsUserExistRequest{Id: int32(request.UserID)})
+	res, err := p.grpc.User(ctx, request.UserID)
 	if err != nil {
-		return "", errors.Wrap(err, "couldn't check user existence")
+		return "", errors.Wrap(err, "check error")
 	}
 
-	if res.Exist {
+	if !res {
 		purchase := model.PurchaseDTO{
 			UserID: request.UserID,
 			Date:   request.Date,
@@ -66,12 +66,12 @@ func (p PurchaseService) FindByID(ctx context.Context, request model.IDPurchaseR
 // FindLastByUserID finds last purchase by user id.
 func (p PurchaseService) FindLastByUserID(ctx context.Context, request model.UserIDPurchaseRequest) (*model.PurchaseDTO, error) {
 	var purchase *model.PurchaseDTO
-	res, err := p.client.User(ctx, &api.IsUserExistRequest{Id: int32(request.ID)})
+	res, err := p.grpc.User(ctx, request.ID)
 	if err != nil {
-		return nil, errors.Wrap(err, "couldn't check user existence")
+		return nil, errors.Wrap(err, "check error")
 	}
 
-	if res.Exist {
+	if res {
 		purchase, err = p.Purchase.FindLastByUserID(ctx, request.ID)
 		if err != nil {
 			return nil, errors.Wrap(err, "couldn't find purchase")
@@ -84,12 +84,12 @@ func (p PurchaseService) FindLastByUserID(ctx context.Context, request model.Use
 // FindAllByUserID finds purchases by user id.
 func (p PurchaseService) FindAllByUserID(ctx context.Context, request model.UserIDPurchaseRequest) ([]model.PurchaseDTO, error) {
 	var purchases []model.PurchaseDTO
-	res, err := p.client.User(ctx, &api.IsUserExistRequest{Id: int32(request.ID)})
+	res, err := p.grpc.User(ctx, request.ID)
 	if err != nil {
-		return nil, errors.Wrap(err, "couldn't check user existence")
+		return nil, errors.Wrap(err, "check error")
 	}
 
-	if res.Exist {
+	if res {
 		purchases, err = p.Purchase.FindAllByUserID(ctx, request.ID)
 		if err != nil {
 			return nil, errors.Wrap(err, "couldn't find purchases")
@@ -102,12 +102,12 @@ func (p PurchaseService) FindAllByUserID(ctx context.Context, request model.User
 // FindByUserIDAndPeriod finds purchases by user id and date period.
 func (p PurchaseService) FindByUserIDAndPeriod(ctx context.Context, request model.UserIDPeriodPurchaseRequest) ([]model.PurchaseDTO, error) {
 	var purchases []model.PurchaseDTO
-	res, err := p.client.User(ctx, &api.IsUserExistRequest{Id: int32(request.ID)})
+	res, err := p.grpc.User(ctx, request.ID)
 	if err != nil {
-		return nil, errors.Wrap(err, "couldn't check user existence")
+		return nil, errors.Wrap(err, "check error")
 	}
 
-	if res.Exist {
+	if res {
 		purchases, err = p.Purchase.FindByUserIDAndPeriod(ctx, request.ID, request.Start, request.End)
 		if err != nil {
 			return nil, errors.Wrap(err, "couldn't find purchases")
@@ -120,12 +120,12 @@ func (p PurchaseService) FindByUserIDAndPeriod(ctx context.Context, request mode
 // FindByUserIDAfterDate finds purchases by user id and after date.
 func (p PurchaseService) FindByUserIDAfterDate(ctx context.Context, request model.UserIDAfterDatePurchaseRequest) ([]model.PurchaseDTO, error) {
 	var purchases []model.PurchaseDTO
-	res, err := p.client.User(ctx, &api.IsUserExistRequest{Id: int32(request.ID)})
+	res, err := p.grpc.User(ctx, request.ID)
 	if err != nil {
-		return nil, errors.Wrap(err, "couldn't check user existence")
+		return nil, errors.Wrap(err, "check error")
 	}
 
-	if res.Exist {
+	if res {
 		purchases, err = p.Purchase.FindByUserIDAfterDate(ctx, request.ID, request.Start)
 		if err != nil {
 			return nil, errors.Wrap(err, "couldn't find purchases")
@@ -138,12 +138,12 @@ func (p PurchaseService) FindByUserIDAfterDate(ctx context.Context, request mode
 // FindByUserIDBeforeDate finds purchases by user id and before date.
 func (p PurchaseService) FindByUserIDBeforeDate(ctx context.Context, request model.UserIDBeforeDatePurchaseRequest) ([]model.PurchaseDTO, error) {
 	var purchases []model.PurchaseDTO
-	res, err := p.client.User(ctx, &api.IsUserExistRequest{Id: int32(request.ID)})
+	res, err := p.grpc.User(ctx, request.ID)
 	if err != nil {
-		return nil, errors.Wrap(err, "couldn't check user existence")
+		return nil, errors.Wrap(err, "check error")
 	}
 
-	if res.Exist {
+	if res {
 		purchases, err = p.Purchase.FindByUserIDBeforeDate(ctx, request.ID, request.End)
 		if err != nil {
 			return nil, errors.Wrap(err, "couldn't find purchases")
@@ -156,12 +156,12 @@ func (p PurchaseService) FindByUserIDBeforeDate(ctx context.Context, request mod
 // FindByUserIDAndFileID finds purchases by user id and file id.
 func (p PurchaseService) FindByUserIDAndFileID(ctx context.Context, request model.UserIDFileIDPurchaseRequest) ([]model.PurchaseDTO, error) {
 	var purchases []model.PurchaseDTO
-	res, err := p.client.User(ctx, &api.IsUserExistRequest{Id: int32(request.UserID)})
+	res, err := p.grpc.User(ctx, request.UserID)
 	if err != nil {
-		return nil, errors.Wrap(err, "couldn't check user existence")
+		return nil, errors.Wrap(err, "check error")
 	}
 
-	if res.Exist {
+	if res {
 		purchases, err = p.Purchase.FindByUserIDAndFileID(ctx, request.UserID, request.FileID)
 		if err != nil {
 			return nil, errors.Wrap(err, "couldn't find purchases")

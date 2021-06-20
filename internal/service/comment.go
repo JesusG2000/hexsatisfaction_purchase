@@ -3,7 +3,7 @@ package service
 import (
 	"context"
 
-	"github.com/JesusG2000/hexsatisfaction/pkg/grpc/api"
+	"github.com/JesusG2000/hexsatisfaction_purchase/internal/grpc"
 	"github.com/JesusG2000/hexsatisfaction_purchase/internal/model"
 	"github.com/JesusG2000/hexsatisfaction_purchase/internal/repository"
 	"github.com/pkg/errors"
@@ -12,23 +12,23 @@ import (
 // CommentService is a purchase service.
 type CommentService struct {
 	repository.Comment
-	client api.ExistanceClient
+	grpc grpc.Checker
 }
 
 // NewCommentService is a CommentService service constructor.
-func NewCommentService(comment repository.Comment, client api.ExistanceClient) *CommentService {
-	return &CommentService{comment, client}
+func NewCommentService(comment repository.Comment, checker grpc.Checker) *CommentService {
+	return &CommentService{comment, checker}
 }
 
 // Create creates comments and returns id.
 func (c CommentService) Create(ctx context.Context, request model.CreateCommentRequest) (string, error) {
 	var id string
-	res, err := c.client.User(ctx, &api.IsUserExistRequest{Id: int32(request.UserID)})
+	res, err := c.grpc.User(ctx, request.UserID)
 	if err != nil {
-		return "", errors.Wrap(err, "couldn't check user existence")
+		return "", errors.Wrap(err, "check error")
 	}
 
-	if res.Exist {
+	if !res {
 		comment := model.CommentDTO{
 			UserID:     request.UserID,
 			PurchaseID: request.PurchaseID,
@@ -47,12 +47,12 @@ func (c CommentService) Create(ctx context.Context, request model.CreateCommentR
 // Update updates comments and returns id.
 func (c CommentService) Update(ctx context.Context, request model.UpdateCommentRequest) (string, error) {
 	var id string
-	res, err := c.client.User(ctx, &api.IsUserExistRequest{Id: int32(request.UserID)})
+	res, err := c.grpc.User(ctx, request.UserID)
 	if err != nil {
-		return "", errors.Wrap(err, "couldn't check user existence")
+		return "", errors.Wrap(err, "check error")
 	}
 
-	if res.Exist {
+	if res {
 		comment := model.CommentDTO{
 			UserID:     request.UserID,
 			PurchaseID: request.PurchaseID,
@@ -90,12 +90,12 @@ func (c CommentService) FindByID(ctx context.Context, request model.IDCommentReq
 // FindAllByUserID finds comments by user id.
 func (c CommentService) FindAllByUserID(ctx context.Context, request model.UserIDCommentRequest) ([]model.CommentDTO, error) {
 	var comments []model.CommentDTO
-	res, err := c.client.User(ctx, &api.IsUserExistRequest{Id: int32(request.ID)})
+	res, err := c.grpc.User(ctx, request.ID)
 	if err != nil {
-		return nil, errors.Wrap(err, "couldn't check user existence")
+		return nil, errors.Wrap(err, "check error")
 	}
 
-	if res.Exist {
+	if res {
 		comments, err = c.Comment.FindAllByUserID(ctx, request.ID)
 		if err != nil {
 			return nil, errors.Wrap(err, "couldn't find comments")
@@ -118,12 +118,12 @@ func (c CommentService) FindByPurchaseID(ctx context.Context, request model.Purc
 // FindByUserIDAndPurchaseID finds comments by purchase and user id.
 func (c CommentService) FindByUserIDAndPurchaseID(ctx context.Context, request model.UserPurchaseIDCommentRequest) ([]model.CommentDTO, error) {
 	var comments []model.CommentDTO
-	res, err := c.client.User(ctx, &api.IsUserExistRequest{Id: int32(request.UserID)})
+	res, err := c.grpc.User(ctx, request.UserID)
 	if err != nil {
-		return nil, errors.Wrap(err, "couldn't check user existence")
+		return nil, errors.Wrap(err, "check error")
 	}
 
-	if res.Exist {
+	if res {
 		comments, err = c.Comment.FindByUserIDAndPurchaseID(ctx, request.UserID, request.PurchaseID)
 		if err != nil {
 			return nil, errors.Wrap(err, "couldn't find comments")

@@ -29,6 +29,7 @@ func Connect2CommentMongo() (context.Context, *CommentRepo, error) {
 
 	return ctx, NewCommentRepo(db), nil
 }
+
 func TestCommentRepo_Create(t *testing.T) {
 	assert := assertTest.New(t)
 	ctx, repo, err := Connect2CommentMongo()
