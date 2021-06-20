@@ -4,7 +4,6 @@ import (
 	"context"
 	"net"
 
-	"github.com/JesusG2000/hexsatisfaction/pkg/grpc/api"
 	"github.com/JesusG2000/hexsatisfaction_purchase/internal/config"
 	"github.com/JesusG2000/hexsatisfaction_purchase/internal/grpc"
 	"github.com/JesusG2000/hexsatisfaction_purchase/internal/repository"
@@ -17,7 +16,7 @@ import (
 type TestAPI struct {
 	*Services
 	auth.TokenManager
-	GRPCClient api.ExistanceClient
+	grpc.Checker
 }
 
 // InitTest4Mock initialize an a TestAPI for mock testing.
@@ -46,7 +45,7 @@ func initServices4Test() (*TestAPI, error) {
 	}
 
 	addr := net.JoinHostPort(cfg.GRPC.Host, cfg.GRPC.Port)
-	grpcClient, err := grpc.NewGRPCClient(addr)
+	grpcClient, err := grpc.NewCheckerService(addr)
 	if err != nil {
 		return nil, errors.Wrap(err, "couldn't init grpc client")
 	}
@@ -55,9 +54,9 @@ func initServices4Test() (*TestAPI, error) {
 		Services: NewServices(Deps{
 			Repos:        repository.NewRepositories(db),
 			TokenManager: tokenManager,
-			GRPCClient:   grpcClient,
+			Existanse:    *grpcClient,
 		}),
 		TokenManager: tokenManager,
-		GRPCClient:   grpcClient,
+		Checker:      grpcClient,
 	}, nil
 }
