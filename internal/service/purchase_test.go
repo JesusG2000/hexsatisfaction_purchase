@@ -10,23 +10,45 @@ import (
 	"github.com/pkg/errors"
 	testAssert "github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 func TestPurchaseService_Create(t *testing.T) {
 	assert := testAssert.New(t)
-	testApi, err := InitTest4Mock()
-	require.NoError(t, err)
 
 	type test struct {
 		name   string
 		req    model.CreatePurchaseRequest
-		fn     func(purchase *m.Purchase, data test)
+		fn     func(purchase *m.Purchase, existence *m.Existanse, data test)
 		expID  string
 		expErr error
 	}
 	tt := []test{
+		{
+			name: "check errors",
+			req: model.CreatePurchaseRequest{
+				UserID: 1,
+				Date:   time.Date(2009, time.December, 10, 23, 0, 0, 0, time.Local),
+				FileID: primitive.NewObjectID().Hex(),
+			},
+			fn: func(purchase *m.Purchase, existence *m.Existanse, data test) {
+				existence.On("User", mock.Anything, data.req.UserID).
+					Return(false, errors.New(""))
+			},
+			expErr: errors.Wrap(errors.New(""), "check error"),
+		},
+		{
+			name: "user exist",
+			req: model.CreatePurchaseRequest{
+				UserID: 1,
+				Date:   time.Date(2009, time.December, 10, 23, 0, 0, 0, time.Local),
+				FileID: primitive.NewObjectID().Hex(),
+			},
+			fn: func(purchase *m.Purchase, existence *m.Existanse, data test) {
+				existence.On("User", mock.Anything, data.req.UserID).
+					Return(true, nil)
+			},
+		},
 		{
 			name: "Create errors",
 			req: model.CreatePurchaseRequest{
@@ -34,7 +56,9 @@ func TestPurchaseService_Create(t *testing.T) {
 				Date:   time.Date(2009, time.December, 10, 23, 0, 0, 0, time.Local),
 				FileID: primitive.NewObjectID().Hex(),
 			},
-			fn: func(purchase *m.Purchase, data test) {
+			fn: func(purchase *m.Purchase, existence *m.Existanse, data test) {
+				existence.On("User", mock.Anything, data.req.UserID).
+					Return(false, nil)
 				purchase.On("Create", mock.Anything, model.PurchaseDTO{
 					UserID: data.req.UserID,
 					Date:   data.req.Date,
@@ -51,7 +75,9 @@ func TestPurchaseService_Create(t *testing.T) {
 				Date:   time.Date(2009, time.December, 10, 23, 0, 0, 0, time.Local),
 				FileID: primitive.NewObjectID().Hex(),
 			},
-			fn: func(purchase *m.Purchase, data test) {
+			fn: func(purchase *m.Purchase, existence *m.Existanse, data test) {
+				existence.On("User", mock.Anything, data.req.UserID).
+					Return(false, nil)
 				purchase.On("Create", mock.Anything, model.PurchaseDTO{
 					UserID: data.req.UserID,
 					Date:   data.req.Date,
@@ -65,11 +91,12 @@ func TestPurchaseService_Create(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			purchase := new(m.Purchase)
+			existence := new(m.Existanse)
 			ctx := context.Background()
-			service := NewPurchaseService(purchase, testApi.GRPCClient)
+			service := NewPurchaseService(purchase, existence)
 
 			if tc.fn != nil {
-				tc.fn(purchase, tc)
+				tc.fn(purchase, existence, tc)
 			}
 			id, err := service.Create(ctx, tc.req)
 			if err != nil {
@@ -82,8 +109,7 @@ func TestPurchaseService_Create(t *testing.T) {
 
 func TestPurchaseService_Delete(t *testing.T) {
 	assert := testAssert.New(t)
-	testApi, err := InitTest4Mock()
-	require.NoError(t, err)
+
 	type test struct {
 		name   string
 		req    model.DeletePurchaseRequest
@@ -119,8 +145,9 @@ func TestPurchaseService_Delete(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			purchase := new(m.Purchase)
+			existence := new(m.Existanse)
 			ctx := context.Background()
-			service := NewPurchaseService(purchase, testApi.GRPCClient)
+			service := NewPurchaseService(purchase, existence)
 
 			if tc.fn != nil {
 				tc.fn(purchase, &tc)
@@ -136,8 +163,7 @@ func TestPurchaseService_Delete(t *testing.T) {
 
 func TestPurchaseService_FindById(t *testing.T) {
 	assert := testAssert.New(t)
-	testApi, err := InitTest4Mock()
-	require.NoError(t, err)
+
 	type test struct {
 		name        string
 		req         model.IDPurchaseRequest
@@ -177,8 +203,9 @@ func TestPurchaseService_FindById(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			purchase := new(m.Purchase)
+			existence := new(m.Existanse)
 			ctx := context.Background()
-			service := NewPurchaseService(purchase, testApi.GRPCClient)
+			service := NewPurchaseService(purchase, existence)
 
 			if tc.fn != nil {
 				tc.fn(purchase, &tc)
@@ -194,22 +221,44 @@ func TestPurchaseService_FindById(t *testing.T) {
 
 func TestPurchaseService_FindLastByUserId(t *testing.T) {
 	assert := testAssert.New(t)
-	testApi, err := InitTest4Mock()
-	require.NoError(t, err)
+
 	type test struct {
 		name        string
 		req         model.UserIDPurchaseRequest
-		fn          func(purchase *m.Purchase, data *test)
+		fn          func(purchase *m.Purchase, existence *m.Existanse, data *test)
 		expPurchase *model.PurchaseDTO
 		expErr      error
 	}
 	tt := []test{
 		{
+			name: "check errors",
+			req: model.UserIDPurchaseRequest{
+				ID: 1,
+			},
+			fn: func(purchase *m.Purchase, existence *m.Existanse, data *test) {
+				existence.On("User", mock.Anything, data.req.ID).
+					Return(false, errors.New(""))
+			},
+			expErr: errors.Wrap(errors.New(""), "check error"),
+		},
+		{
+			name: "user not found",
+			req: model.UserIDPurchaseRequest{
+				ID: 1,
+			},
+			fn: func(purchase *m.Purchase, existence *m.Existanse, data *test) {
+				existence.On("User", mock.Anything, data.req.ID).
+					Return(false, nil)
+			},
+		},
+		{
 			name: "FindLastByUserID errors",
 			req: model.UserIDPurchaseRequest{
 				ID: 1,
 			},
-			fn: func(purchase *m.Purchase, data *test) {
+			fn: func(purchase *m.Purchase, existence *m.Existanse, data *test) {
+				existence.On("User", mock.Anything, data.req.ID).
+					Return(true, nil)
 				purchase.On("FindLastByUserID", mock.Anything, data.req.ID).
 					Return(data.expPurchase, errors.New(""))
 			},
@@ -220,8 +269,10 @@ func TestPurchaseService_FindLastByUserId(t *testing.T) {
 			req: model.UserIDPurchaseRequest{
 				ID: 1,
 			},
-			fn: func(purchase *m.Purchase, data *test) {
+			fn: func(purchase *m.Purchase, existence *m.Existanse, data *test) {
 				data.expPurchase.UserID = data.req.ID
+				existence.On("User", mock.Anything, data.req.ID).
+					Return(true, nil)
 				purchase.On("FindLastByUserID", mock.Anything, data.req.ID).
 					Return(data.expPurchase, nil)
 			},
@@ -235,11 +286,12 @@ func TestPurchaseService_FindLastByUserId(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			purchase := new(m.Purchase)
+			existence := new(m.Existanse)
 			ctx := context.Background()
-			service := NewPurchaseService(purchase, testApi.GRPCClient)
+			service := NewPurchaseService(purchase, existence)
 
 			if tc.fn != nil {
-				tc.fn(purchase, &tc)
+				tc.fn(purchase, existence, &tc)
 			}
 			p, err := service.FindLastByUserID(ctx, tc.req)
 			if err != nil {
@@ -252,22 +304,44 @@ func TestPurchaseService_FindLastByUserId(t *testing.T) {
 
 func TestPurchaseService_FindAllByUserId(t *testing.T) {
 	assert := testAssert.New(t)
-	testApi, err := InitTest4Mock()
-	require.NoError(t, err)
+
 	type test struct {
 		name        string
 		req         model.UserIDPurchaseRequest
-		fn          func(purchase *m.Purchase, data *test)
+		fn          func(purchase *m.Purchase, existence *m.Existanse, data *test)
 		expPurchase []model.PurchaseDTO
 		expErr      error
 	}
 	tt := []test{
 		{
+			name: "check errors",
+			req: model.UserIDPurchaseRequest{
+				ID: 1,
+			},
+			fn: func(purchase *m.Purchase, existence *m.Existanse, data *test) {
+				existence.On("User", mock.Anything, data.req.ID).
+					Return(false, errors.New(""))
+			},
+			expErr: errors.Wrap(errors.New(""), "check error"),
+		},
+		{
+			name: "user not found",
+			req: model.UserIDPurchaseRequest{
+				ID: 1,
+			},
+			fn: func(purchase *m.Purchase, existence *m.Existanse, data *test) {
+				existence.On("User", mock.Anything, data.req.ID).
+					Return(false, nil)
+			},
+		},
+		{
 			name: "FindAllByUserID errors",
 			req: model.UserIDPurchaseRequest{
 				ID: 1,
 			},
-			fn: func(purchase *m.Purchase, data *test) {
+			fn: func(purchase *m.Purchase, existence *m.Existanse, data *test) {
+				existence.On("User", mock.Anything, data.req.ID).
+					Return(true, nil)
 				purchase.On("FindAllByUserID", mock.Anything, data.req.ID).
 					Return(data.expPurchase, errors.New(""))
 			},
@@ -278,10 +352,12 @@ func TestPurchaseService_FindAllByUserId(t *testing.T) {
 			req: model.UserIDPurchaseRequest{
 				ID: 1,
 			},
-			fn: func(purchase *m.Purchase, data *test) {
+			fn: func(purchase *m.Purchase, existence *m.Existanse, data *test) {
 				for i := range data.expPurchase {
 					data.expPurchase[i].UserID = data.req.ID
 				}
+				existence.On("User", mock.Anything, data.req.ID).
+					Return(true, nil)
 				purchase.On("FindAllByUserID", mock.Anything, data.req.ID).
 					Return(data.expPurchase, nil)
 			},
@@ -302,11 +378,12 @@ func TestPurchaseService_FindAllByUserId(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			purchase := new(m.Purchase)
+			existence := new(m.Existanse)
 			ctx := context.Background()
-			service := NewPurchaseService(purchase, testApi.GRPCClient)
+			service := NewPurchaseService(purchase, existence)
 
 			if tc.fn != nil {
-				tc.fn(purchase, &tc)
+				tc.fn(purchase, existence, &tc)
 			}
 			p, err := service.FindAllByUserID(ctx, tc.req)
 			if err != nil {
@@ -319,16 +396,40 @@ func TestPurchaseService_FindAllByUserId(t *testing.T) {
 
 func TestPurchaseService_FindByUserIdAndPeriod(t *testing.T) {
 	assert := testAssert.New(t)
-	testApi, err := InitTest4Mock()
-	require.NoError(t, err)
+
 	type test struct {
 		name        string
 		req         model.UserIDPeriodPurchaseRequest
-		fn          func(purchase *m.Purchase, data *test)
+		fn          func(purchase *m.Purchase, existence *m.Existanse, data *test)
 		expPurchase []model.PurchaseDTO
 		expErr      error
 	}
 	tt := []test{
+		{
+			name: "check errors",
+			req: model.UserIDPeriodPurchaseRequest{
+				ID:    1,
+				Start: time.Date(2009, time.November, 10, 23, 0, 0, 0, time.Local),
+				End:   time.Date(2009, time.December, 10, 23, 0, 0, 0, time.Local),
+			},
+			fn: func(purchase *m.Purchase, existence *m.Existanse, data *test) {
+				existence.On("User", mock.Anything, data.req.ID).
+					Return(false, errors.New(""))
+			},
+			expErr: errors.Wrap(errors.New(""), "check error"),
+		},
+		{
+			name: "user not found",
+			req: model.UserIDPeriodPurchaseRequest{
+				ID:    1,
+				Start: time.Date(2009, time.November, 10, 23, 0, 0, 0, time.Local),
+				End:   time.Date(2009, time.December, 10, 23, 0, 0, 0, time.Local),
+			},
+			fn: func(purchase *m.Purchase, existence *m.Existanse, data *test) {
+				existence.On("User", mock.Anything, data.req.ID).
+					Return(false, nil)
+			},
+		},
 		{
 			name: "FindByUserIDAndPeriod errors",
 			req: model.UserIDPeriodPurchaseRequest{
@@ -336,7 +437,9 @@ func TestPurchaseService_FindByUserIdAndPeriod(t *testing.T) {
 				Start: time.Date(2009, time.November, 10, 23, 0, 0, 0, time.Local),
 				End:   time.Date(2009, time.December, 10, 23, 0, 0, 0, time.Local),
 			},
-			fn: func(purchase *m.Purchase, data *test) {
+			fn: func(purchase *m.Purchase, existence *m.Existanse, data *test) {
+				existence.On("User", mock.Anything, data.req.ID).
+					Return(true, nil)
 				purchase.On("FindByUserIDAndPeriod", mock.Anything, data.req.ID, data.req.Start, data.req.End).
 					Return(data.expPurchase, errors.New(""))
 			},
@@ -349,10 +452,12 @@ func TestPurchaseService_FindByUserIdAndPeriod(t *testing.T) {
 				Start: time.Date(2009, time.November, 10, 23, 0, 0, 0, time.Local),
 				End:   time.Date(2009, time.December, 10, 23, 0, 0, 0, time.Local),
 			},
-			fn: func(purchase *m.Purchase, data *test) {
+			fn: func(purchase *m.Purchase, existence *m.Existanse, data *test) {
 				for i := range data.expPurchase {
 					data.expPurchase[i].UserID = data.req.ID
 				}
+				existence.On("User", mock.Anything, data.req.ID).
+					Return(true, nil)
 				purchase.On("FindByUserIDAndPeriod", mock.Anything, data.req.ID, data.req.Start, data.req.End).
 					Return(data.expPurchase, nil)
 			},
@@ -373,11 +478,12 @@ func TestPurchaseService_FindByUserIdAndPeriod(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			purchase := new(m.Purchase)
+			existence := new(m.Existanse)
 			ctx := context.Background()
-			service := NewPurchaseService(purchase, testApi.GRPCClient)
+			service := NewPurchaseService(purchase, existence)
 
 			if tc.fn != nil {
-				tc.fn(purchase, &tc)
+				tc.fn(purchase, existence, &tc)
 			}
 			p, err := service.FindByUserIDAndPeriod(ctx, tc.req)
 			if err != nil {
@@ -390,23 +496,47 @@ func TestPurchaseService_FindByUserIdAndPeriod(t *testing.T) {
 
 func TestPurchaseService_FindByUserIdAfterDate(t *testing.T) {
 	assert := testAssert.New(t)
-	testApi, err := InitTest4Mock()
-	require.NoError(t, err)
+
 	type test struct {
 		name        string
 		req         model.UserIDAfterDatePurchaseRequest
-		fn          func(purchase *m.Purchase, data *test)
+		fn          func(purchase *m.Purchase, existence *m.Existanse, data *test)
 		expPurchase []model.PurchaseDTO
 		expErr      error
 	}
 	tt := []test{
+		{
+			name: "check errors",
+			req: model.UserIDAfterDatePurchaseRequest{
+				ID:    1,
+				Start: time.Date(2009, time.November, 10, 23, 0, 0, 0, time.Local),
+			},
+			fn: func(purchase *m.Purchase, existence *m.Existanse, data *test) {
+				existence.On("User", mock.Anything, data.req.ID).
+					Return(false, errors.New(""))
+			},
+			expErr: errors.Wrap(errors.New(""), "check error"),
+		},
+		{
+			name: "user not found",
+			req: model.UserIDAfterDatePurchaseRequest{
+				ID:    1,
+				Start: time.Date(2009, time.November, 10, 23, 0, 0, 0, time.Local),
+			},
+			fn: func(purchase *m.Purchase, existence *m.Existanse, data *test) {
+				existence.On("User", mock.Anything, data.req.ID).
+					Return(false, nil)
+			},
+		},
 		{
 			name: "FindByUserIDAfterDate errors",
 			req: model.UserIDAfterDatePurchaseRequest{
 				ID:    1,
 				Start: time.Date(2009, time.November, 10, 23, 0, 0, 0, time.Local),
 			},
-			fn: func(purchase *m.Purchase, data *test) {
+			fn: func(purchase *m.Purchase, existence *m.Existanse, data *test) {
+				existence.On("User", mock.Anything, data.req.ID).
+					Return(true, nil)
 				purchase.On("FindByUserIDAfterDate", mock.Anything, data.req.ID, data.req.Start).
 					Return(data.expPurchase, errors.New(""))
 			},
@@ -418,10 +548,12 @@ func TestPurchaseService_FindByUserIdAfterDate(t *testing.T) {
 				ID:    1,
 				Start: time.Date(2009, time.November, 10, 23, 0, 0, 0, time.Local),
 			},
-			fn: func(purchase *m.Purchase, data *test) {
+			fn: func(purchase *m.Purchase, existence *m.Existanse, data *test) {
 				for i := range data.expPurchase {
 					data.expPurchase[i].UserID = data.req.ID
 				}
+				existence.On("User", mock.Anything, data.req.ID).
+					Return(true, nil)
 				purchase.On("FindByUserIDAfterDate", mock.Anything, data.req.ID, data.req.Start).
 					Return(data.expPurchase, nil)
 			},
@@ -442,11 +574,12 @@ func TestPurchaseService_FindByUserIdAfterDate(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			purchase := new(m.Purchase)
+			existence := new(m.Existanse)
 			ctx := context.Background()
-			service := NewPurchaseService(purchase, testApi.GRPCClient)
+			service := NewPurchaseService(purchase, existence)
 
 			if tc.fn != nil {
-				tc.fn(purchase, &tc)
+				tc.fn(purchase, existence, &tc)
 			}
 			p, err := service.FindByUserIDAfterDate(ctx, tc.req)
 			if err != nil {
@@ -459,23 +592,47 @@ func TestPurchaseService_FindByUserIdAfterDate(t *testing.T) {
 
 func TestPurchaseService_FindByUserIdBeforeDate(t *testing.T) {
 	assert := testAssert.New(t)
-	testApi, err := InitTest4Mock()
-	require.NoError(t, err)
+
 	type test struct {
 		name        string
 		req         model.UserIDBeforeDatePurchaseRequest
-		fn          func(purchase *m.Purchase, data *test)
+		fn          func(purchase *m.Purchase, existence *m.Existanse, data *test)
 		expPurchase []model.PurchaseDTO
 		expErr      error
 	}
 	tt := []test{
+		{
+			name: "check errors",
+			req: model.UserIDBeforeDatePurchaseRequest{
+				ID:  1,
+				End: time.Date(2009, time.December, 10, 23, 0, 0, 0, time.Local),
+			},
+			fn: func(purchase *m.Purchase, existence *m.Existanse, data *test) {
+				existence.On("User", mock.Anything, data.req.ID).
+					Return(false, errors.New(""))
+			},
+			expErr: errors.Wrap(errors.New(""), "check error"),
+		},
+		{
+			name: "user not found",
+			req: model.UserIDBeforeDatePurchaseRequest{
+				ID:  1,
+				End: time.Date(2009, time.December, 10, 23, 0, 0, 0, time.Local),
+			},
+			fn: func(purchase *m.Purchase, existence *m.Existanse, data *test) {
+				existence.On("User", mock.Anything, data.req.ID).
+					Return(false, nil)
+			},
+		},
 		{
 			name: "FindByUserIDBeforeDate errors",
 			req: model.UserIDBeforeDatePurchaseRequest{
 				ID:  1,
 				End: time.Date(2009, time.December, 10, 23, 0, 0, 0, time.Local),
 			},
-			fn: func(purchase *m.Purchase, data *test) {
+			fn: func(purchase *m.Purchase, existence *m.Existanse, data *test) {
+				existence.On("User", mock.Anything, data.req.ID).
+					Return(true, nil)
 				purchase.On("FindByUserIDBeforeDate", mock.Anything, data.req.ID, data.req.End).
 					Return(data.expPurchase, errors.New(""))
 			},
@@ -487,10 +644,12 @@ func TestPurchaseService_FindByUserIdBeforeDate(t *testing.T) {
 				ID:  1,
 				End: time.Date(2009, time.December, 10, 23, 0, 0, 0, time.Local),
 			},
-			fn: func(purchase *m.Purchase, data *test) {
+			fn: func(purchase *m.Purchase, existence *m.Existanse, data *test) {
 				for i := range data.expPurchase {
 					data.expPurchase[i].UserID = data.req.ID
 				}
+				existence.On("User", mock.Anything, data.req.ID).
+					Return(true, nil)
 				purchase.On("FindByUserIDBeforeDate", mock.Anything, data.req.ID, data.req.End).
 					Return(data.expPurchase, nil)
 			},
@@ -511,11 +670,12 @@ func TestPurchaseService_FindByUserIdBeforeDate(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			purchase := new(m.Purchase)
+			existence := new(m.Existanse)
 			ctx := context.Background()
-			service := NewPurchaseService(purchase, testApi.GRPCClient)
+			service := NewPurchaseService(purchase, existence)
 
 			if tc.fn != nil {
-				tc.fn(purchase, &tc)
+				tc.fn(purchase, existence, &tc)
 			}
 			p, err := service.FindByUserIDBeforeDate(ctx, tc.req)
 			if err != nil {
@@ -528,23 +688,47 @@ func TestPurchaseService_FindByUserIdBeforeDate(t *testing.T) {
 
 func TestPurchaseService_FindByUserIdAndFileID(t *testing.T) {
 	assert := testAssert.New(t)
-	testApi, err := InitTest4Mock()
-	require.NoError(t, err)
+
 	type test struct {
 		name        string
 		req         model.UserIDFileIDPurchaseRequest
-		fn          func(purchase *m.Purchase, data *test)
+		fn          func(purchase *m.Purchase, existence *m.Existanse, data *test)
 		expPurchase []model.PurchaseDTO
 		expErr      error
 	}
 	tt := []test{
+		{
+			name: "check errors",
+			req: model.UserIDFileIDPurchaseRequest{
+				UserID: 1,
+				FileID: primitive.NewObjectID().Hex(),
+			},
+			fn: func(purchase *m.Purchase, existence *m.Existanse, data *test) {
+				existence.On("User", mock.Anything, data.req.UserID).
+					Return(false, errors.New(""))
+			},
+			expErr: errors.Wrap(errors.New(""), "check error"),
+		},
+		{
+			name: "user not found",
+			req: model.UserIDFileIDPurchaseRequest{
+				UserID: 1,
+				FileID: primitive.NewObjectID().Hex(),
+			},
+			fn: func(purchase *m.Purchase, existence *m.Existanse, data *test) {
+				existence.On("User", mock.Anything, data.req.UserID).
+					Return(false, nil)
+			},
+		},
 		{
 			name: "FindByUserIDAndFileID errors",
 			req: model.UserIDFileIDPurchaseRequest{
 				UserID: 1,
 				FileID: primitive.NewObjectID().Hex(),
 			},
-			fn: func(purchase *m.Purchase, data *test) {
+			fn: func(purchase *m.Purchase, existence *m.Existanse, data *test) {
+				existence.On("User", mock.Anything, data.req.UserID).
+					Return(true, nil)
 				purchase.On("FindByUserIDAndFileID", mock.Anything, data.req.UserID, data.req.FileID).
 					Return(data.expPurchase, errors.New(""))
 			},
@@ -556,11 +740,13 @@ func TestPurchaseService_FindByUserIdAndFileID(t *testing.T) {
 				UserID: 1,
 				FileID: primitive.NewObjectID().Hex(),
 			},
-			fn: func(purchase *m.Purchase, data *test) {
+			fn: func(purchase *m.Purchase, existence *m.Existanse, data *test) {
 				for i := range data.expPurchase {
 					data.expPurchase[i].UserID = data.req.UserID
 					data.expPurchase[i].FileID = data.req.FileID
 				}
+				existence.On("User", mock.Anything, data.req.UserID).
+					Return(true, nil)
 				purchase.On("FindByUserIDAndFileID", mock.Anything, data.req.UserID, data.req.FileID).
 					Return(data.expPurchase, nil)
 			},
@@ -579,11 +765,12 @@ func TestPurchaseService_FindByUserIdAndFileID(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			purchase := new(m.Purchase)
+			existence := new(m.Existanse)
 			ctx := context.Background()
-			service := NewPurchaseService(purchase, testApi.GRPCClient)
+			service := NewPurchaseService(purchase, existence)
 
 			if tc.fn != nil {
-				tc.fn(purchase, &tc)
+				tc.fn(purchase, existence, &tc)
 			}
 			p, err := service.FindByUserIDAndFileID(ctx, tc.req)
 			if err != nil {
@@ -596,8 +783,7 @@ func TestPurchaseService_FindByUserIdAndFileID(t *testing.T) {
 
 func TestPurchaseService_FindLast(t *testing.T) {
 	assert := testAssert.New(t)
-	testApi, err := InitTest4Mock()
-	require.NoError(t, err)
+
 	type test struct {
 		name        string
 		fn          func(purchase *m.Purchase, data test)
@@ -630,8 +816,9 @@ func TestPurchaseService_FindLast(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			purchase := new(m.Purchase)
+			existence := new(m.Existanse)
 			ctx := context.Background()
-			service := NewPurchaseService(purchase, testApi.GRPCClient)
+			service := NewPurchaseService(purchase, existence)
 
 			if tc.fn != nil {
 				tc.fn(purchase, tc)
@@ -647,8 +834,7 @@ func TestPurchaseService_FindLast(t *testing.T) {
 
 func TestPurchaseService_FindAll(t *testing.T) {
 	assert := testAssert.New(t)
-	testApi, err := InitTest4Mock()
-	require.NoError(t, err)
+
 	type test struct {
 		name        string
 		fn          func(purchase *m.Purchase, data test)
@@ -689,8 +875,9 @@ func TestPurchaseService_FindAll(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			purchase := new(m.Purchase)
+			existence := new(m.Existanse)
 			ctx := context.Background()
-			service := NewPurchaseService(purchase, testApi.GRPCClient)
+			service := NewPurchaseService(purchase, existence)
 
 			if tc.fn != nil {
 				tc.fn(purchase, tc)
@@ -706,8 +893,7 @@ func TestPurchaseService_FindAll(t *testing.T) {
 
 func TestPurchaseService_FindByPeriod(t *testing.T) {
 	assert := testAssert.New(t)
-	testApi, err := InitTest4Mock()
-	require.NoError(t, err)
+
 	type test struct {
 		name        string
 		req         model.PeriodPurchaseRequest
@@ -757,8 +943,9 @@ func TestPurchaseService_FindByPeriod(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			purchase := new(m.Purchase)
+			existence := new(m.Existanse)
 			ctx := context.Background()
-			service := NewPurchaseService(purchase, testApi.GRPCClient)
+			service := NewPurchaseService(purchase, existence)
 
 			if tc.fn != nil {
 				tc.fn(purchase, tc)
@@ -774,8 +961,7 @@ func TestPurchaseService_FindByPeriod(t *testing.T) {
 
 func TestPurchaseService_FindAfterDate(t *testing.T) {
 	assert := testAssert.New(t)
-	testApi, err := InitTest4Mock()
-	require.NoError(t, err)
+
 	type test struct {
 		name        string
 		req         model.AfterDatePurchaseRequest
@@ -823,8 +1009,9 @@ func TestPurchaseService_FindAfterDate(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			purchase := new(m.Purchase)
+			existence := new(m.Existanse)
 			ctx := context.Background()
-			service := NewPurchaseService(purchase, testApi.GRPCClient)
+			service := NewPurchaseService(purchase, existence)
 
 			if tc.fn != nil {
 				tc.fn(purchase, tc)
@@ -840,8 +1027,7 @@ func TestPurchaseService_FindAfterDate(t *testing.T) {
 
 func TestPurchaseService_FindBeforeDate(t *testing.T) {
 	assert := testAssert.New(t)
-	testApi, err := InitTest4Mock()
-	require.NoError(t, err)
+
 	type test struct {
 		name        string
 		req         model.BeforeDatePurchaseRequest
@@ -886,8 +1072,9 @@ func TestPurchaseService_FindBeforeDate(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			purchase := new(m.Purchase)
+			existence := new(m.Existanse)
 			ctx := context.Background()
-			service := NewPurchaseService(purchase, testApi.GRPCClient)
+			service := NewPurchaseService(purchase, existence)
 
 			if tc.fn != nil {
 				tc.fn(purchase, tc)
@@ -903,8 +1090,7 @@ func TestPurchaseService_FindBeforeDate(t *testing.T) {
 
 func TestPurchaseService_FindByFileID(t *testing.T) {
 	assert := testAssert.New(t)
-	testApi, err := InitTest4Mock()
-	require.NoError(t, err)
+
 	type test struct {
 		name        string
 		req         model.FileIDPurchaseRequest
@@ -953,8 +1139,9 @@ func TestPurchaseService_FindByFileID(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			purchase := new(m.Purchase)
+			existence := new(m.Existanse)
 			ctx := context.Background()
-			service := NewPurchaseService(purchase, testApi.GRPCClient)
+			service := NewPurchaseService(purchase, existence)
 
 			if tc.fn != nil {
 				tc.fn(purchase, tc)
