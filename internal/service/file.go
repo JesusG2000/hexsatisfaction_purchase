@@ -3,7 +3,7 @@ package service
 import (
 	"context"
 
-	"github.com/JesusG2000/hexsatisfaction/pkg/grpc/api"
+	"github.com/JesusG2000/hexsatisfaction_purchase/internal/grpc"
 	"github.com/JesusG2000/hexsatisfaction_purchase/internal/model"
 	"github.com/JesusG2000/hexsatisfaction_purchase/internal/repository"
 	"github.com/pkg/errors"
@@ -12,23 +12,23 @@ import (
 // FileService is a file service.
 type FileService struct {
 	repository.File
-	client api.ExistanceClient
+	grpc grpc.Checker
 }
 
 // NewFileService is a FileService service constructor.
-func NewFileService(file repository.File, client api.ExistanceClient) *FileService {
-	return &FileService{file, client}
+func NewFileService(file repository.File, grpc grpc.Checker) *FileService {
+	return &FileService{file, grpc}
 }
 
 // Create creates new file and returns id.
 func (f FileService) Create(ctx context.Context, request model.CreateFileRequest) (string, error) {
 	var id string
-	res, err := f.client.Author(ctx, &api.IsAuthorExistRequest{Id: int32(request.AuthorID)})
+	res, err := f.grpc.Author(ctx, request.AuthorID)
 	if err != nil {
-		return "", errors.Wrap(err, "couldn't check user existence")
+		return "", errors.Wrap(err, "check error")
 	}
 
-	if res.Exist {
+	if !res {
 		file := model.FileDTO{
 			Name:        request.Name,
 			Description: request.Description,
@@ -51,12 +51,12 @@ func (f FileService) Create(ctx context.Context, request model.CreateFileRequest
 // Update updates file and returns id.
 func (f FileService) Update(ctx context.Context, request model.UpdateFileRequest) (string, error) {
 	var id string
-	res, err := f.client.Author(ctx, &api.IsAuthorExistRequest{Id: int32(request.AuthorID)})
+	res, err := f.grpc.Author(ctx, request.AuthorID)
 	if err != nil {
-		return "", errors.Wrap(err, "couldn't check user existence")
+		return "", errors.Wrap(err, "check error")
 	}
 
-	if res.Exist {
+	if res {
 		file := model.FileDTO{
 			Name:        request.Name,
 			Description: request.Description,
@@ -119,12 +119,12 @@ func (f FileService) FindAll(ctx context.Context) ([]model.FileDTO, error) {
 // FindByAuthorID finds files by author id.
 func (f FileService) FindByAuthorID(ctx context.Context, request model.AuthorIDFileRequest) ([]model.FileDTO, error) {
 	var files []model.FileDTO
-	res, err := f.client.Author(ctx, &api.IsAuthorExistRequest{Id: int32(request.ID)})
+	res, err := f.grpc.Author(ctx, request.ID)
 	if err != nil {
-		return nil, errors.Wrap(err, "couldn't check user existence")
+		return nil, errors.Wrap(err, "check error")
 	}
 
-	if res.Exist {
+	if res {
 		files, err = f.File.FindByAuthorID(ctx, request.ID)
 		if err != nil {
 			return nil, errors.Wrap(err, "couldn't find files")
